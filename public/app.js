@@ -1,5 +1,10 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
 const CACHE_KEY = 'liquidity-seas-graph';
 const CACHE_TTL = 5 * 60 * 1000;
+const GEOJSON_URL = 'https://raw.githubusercontent.com/martynafford/natural-earth-geojson/master/110m/physical/ne_110m_land.json';
 
 async function loadGraphData() {
   try {
@@ -19,174 +24,236 @@ async function loadGraphData() {
 const $ = (sel) => document.querySelector(sel);
 const formatNumber = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
 
-function hash(str) {
+const data = await loadGraphData();
+const nodes = data.api?.data?.nodes || [];
+const edges = data.api?.data?.edges || [];
+const attributions = data.attributions || [];
+const nodeById = new Map(nodes.map((n) => [n.id, n]));
+
+// ---------- 3D Globe ----------
+const container = document.getElementById('globe-container');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(container.clientWidth, container.clientHeight);
+container.appendChild(renderer.domElement);
+
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(container.clientWidth, container.clientHeight);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0';
+labelRenderer.domElement.style.pointerEvents = 'none';
+container.appendChild(labelRenderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050817);
+
+const camera = new THREE.PerspectiveCamera(42, container.clientWidth / container.clientHeight, 0.1, 100);
+camera.position.set(0, 0, 5.8);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 3.2;
+controls.maxDistance = 9;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.35;
+
+const globeGeo = new THREE.SphereGeometry(1.6, 64, 64);
+const globeMat = new THREE.MeshPhongMaterial({
+  color: 0x061018,
+  emissive: 0x030810,
+  shininess: 8,
+  transparent: true,
+  opacity: 0.95,
+});
+const globe = new THREE.Mesh(globeGeo, globeMat);
+scene.add(globe);
+
+const atmosGeo = new THREE.SphereGeometry(1.74, 64, 64);
+const atmosMat = new THREE.MeshBasicMaterial({
+  color: 0x25c7ff,
+  transparent: true,
+  opacity: 0.07,
+  side: THREE.BackSide,
+});
+scene.add(new THREE.Mesh(atmosGeo, atmosMat));
+
+const starGeo = new THREE.BufferGeometry();
+const starCount = 1800;
+const starPos = new Float32Array(starCount * 3);
+for (let i = 0; i < starCount; i++) {
+  const r = 40 + Math.random() * 60;
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+  starPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+  starPos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+  starPos[i * 3 + 2] = r * Math.cos(phi);
+}
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.055, transparent: true, opacity: 0.65 });
+scene.add(new THREE.Points(starGeo, starMat));
+
+const ambient = new THREE.AmbientLight(0x334455, 0.55);
+scene.add(ambient);
+const dir = new THREE.DirectionalLight(0xffffff, 0.85);
+dir.position.set(4, 2, 3);
+scene.add(dir);
+
+function latLonToVec3(lat, lon, radius = 1.605) {
+  const phi = (90 - lat) * (Math.PI / 180);
+  const theta = (lon + 180) * (Math.PI / 180);
+  return new THREE.Vector3(
+    -radius * Math.sin(phi) * Math.cos(theta),
+    radius * Math.cos(phi),
+    radius * Math.sin(phi) * Math.sin(theta)
+  );
+}
+
+async function buildDottedContinents() {
+  try {
+    const res = await fetch(GEOJSON_URL);
+    const geo = await res.json();
+    const positions = [];
+    const step = 0.35;
+
+    function addRing(ring) {
+      for (let i = 0; i < ring.length; i++) {
+        const [lon, lat] = ring[i];
+        const next = ring[(i + 1) % ring.length];
+        const [nLon, nLat] = next;
+        const dist = Math.hypot(nLon - lon, nLat - lat);
+        const steps = Math.max(1, Math.floor(dist / step));
+        for (let s = 0; s <= steps; s++) {
+          const t = s / steps;
+          const clat = lat + (nLat - lat) * t;
+          const clon = lon + (nLon - lon) * t;
+          const v = latLonToVec3(clat, clon, 1.605);
+          positions.push(v.x, v.y, v.z);
+        }
+      }
+    }
+
+    for (const feature of geo.features || []) {
+      const geom = feature.geometry;
+      if (!geom) continue;
+      if (geom.type === 'Polygon') {
+        for (const ring of geom.coordinates) addRing(ring);
+      } else if (geom.type === 'MultiPolygon') {
+        for (const poly of geom.coordinates) {
+          for (const ring of poly) addRing(ring);
+        }
+      }
+    }
+
+    if (positions.length) {
+      const dotGeo = new THREE.BufferGeometry();
+      dotGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      const dotMat = new THREE.PointsMaterial({
+        color: 0x8fb7cc,
+        size: 0.018,
+        transparent: true,
+        opacity: 0.85,
+        sizeAttenuation: true,
+      });
+      const dots = new THREE.Points(dotGeo, dotMat);
+      scene.add(dots);
+    }
+  } catch (err) {
+    console.warn('Continent dots failed to load', err);
+  }
+}
+
+buildDottedContinents();
+
+const pointsGroup = new THREE.Group();
+scene.add(pointsGroup);
+
+function hashToLatLon(str) {
   let h = 0;
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
-  return h;
+  const lat = ((h % 140) - 70);
+  const lon = ((h >> 8) % 360) - 180;
+  return { lat, lon };
 }
 
-function hashToPos(str, w, h) {
-  const hsh = hash(str);
-  const x = 0.08 + ((hsh % 840) / 1000);
-  const y = 0.12 + (((hsh >> 8) % 760) / 1000);
-  return { x: x * w, y: y * h };
-}
+const pointMeshes = [];
+nodes.filter(n => n.kind === 'entity').forEach((node) => {
+  const weight = edges
+    .filter((e) => e.fromNodeId === node.id || e.toNodeId === node.id)
+    .reduce((s, e) => s + (e.weight || 0), 0);
+  const size = Math.max(0.04, Math.min(0.16, Math.sqrt(weight) / 140));
 
-// ---------- Canvas sea + heatmap ----------
-const canvas = document.getElementById('sea');
-const wrap = document.getElementById('map-wrap');
-const tooltip = document.getElementById('tooltip');
-const ctx = canvas.getContext('2d');
+  const { lat, lon } = hashToLatLon(node.label || node.id);
+  const pos = latLonToVec3(lat, lon, 1.63);
 
-function resize() {
-  const rect = wrap.getBoundingClientRect();
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = Math.floor(rect.width * dpr);
-  canvas.height = Math.floor(rect.width * 0.56 * dpr);
-  canvas.style.width = rect.width + 'px';
-  canvas.style.height = (rect.width * 0.56) + 'px';
-  return dpr;
-}
-
-function noise(x, y) {
-  const n = Math.sin(x * 0.008 + y * 0.012) * 0.5
-          + Math.sin(x * 0.015 - y * 0.009) * 0.3
-          + Math.sin((x + y) * 0.006) * 0.2;
-  return n;
-}
-
-function drawOcean(dpr) {
-  const w = canvas.width;
-  const h = canvas.height;
-  const image = ctx.createImageData(w, h);
-  const data = image.data;
-
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const n = noise(x / dpr, y / dpr);
-      const deep = 0.35 + n * 0.25;
-      const r = Math.floor(6 + deep * 18);
-      const g = Math.floor(18 + deep * 40);
-      const b = Math.floor(32 + deep * 55);
-      const i = (y * w + x) * 4;
-      data[i] = r;
-      data[i + 1] = g;
-      data[i + 2] = b;
-      data[i + 3] = 255;
-    }
-  }
-  ctx.putImageData(image, 0, 0);
-
-  // Soft current lines
-  ctx.strokeStyle = 'rgba(37, 199, 255, 0.12)';
-  ctx.lineWidth = 1.2 * dpr;
-  for (let i = 0; i < 18; i++) {
-    ctx.beginPath();
-    let px = (i * 90) % w;
-    let py = h * 0.2 + (i % 5) * (h * 0.12);
-    ctx.moveTo(px, py);
-    for (let s = 0; s < 40; s++) {
-      px += 18 * dpr + Math.sin(i + s * 0.4) * 8;
-      py += Math.sin(s * 0.3 + i) * 6;
-      ctx.lineTo(px, py);
-    }
-    ctx.stroke();
-  }
-}
-
-function drawHeat(points, dpr) {
-  if (!points.length) return;
-  const max = Math.max(...points.map(p => p.weight));
-  points.forEach((p) => {
-    const intensity = Math.max(0.15, p.weight / max);
-    const radius = (40 + intensity * 90) * dpr;
-    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
-    const hue = 190 - intensity * 40;
-    grd.addColorStop(0, `hsla(${hue}, 95%, 62%, ${0.55 * intensity})`);
-    grd.addColorStop(0.45, `hsla(${hue + 20}, 90%, 55%, ${0.22 * intensity})`);
-    grd.addColorStop(1, 'hsla(200, 80%, 50%, 0)');
-    ctx.fillStyle = grd;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = `hsla(${hue}, 100%, 70%, 0.9)`;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 4.5 * dpr, 0, Math.PI * 2);
-    ctx.fill();
+  const geo = new THREE.SphereGeometry(size, 16, 16);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x25c7ff,
+    transparent: true,
+    opacity: 0.9,
   });
-}
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(pos);
+  mesh.userData = { node, weight };
+  pointsGroup.add(mesh);
+  pointMeshes.push(mesh);
 
-let points = [];
-let dpr = 1;
+  const ringGeo = new THREE.RingGeometry(size * 1.5, size * 1.9, 24);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: 0x25c7ff,
+    transparent: true,
+    opacity: 0.22,
+    side: THREE.DoubleSide,
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.position.copy(pos);
+  ring.lookAt(0, 0, 0);
+  pointsGroup.add(ring);
 
-function renderMap(nodes, edges) {
-  dpr = resize();
-  drawOcean(dpr);
-
-  const w = canvas.width;
-  const h = canvas.height;
-  points = nodes
-    .filter(n => n.kind === 'entity')
-    .map(node => {
-      const weight = edges
-        .filter(e => e.fromNodeId === node.id || e.toNodeId === node.id)
-        .reduce((s, e) => s + (e.weight || 0), 0);
-      const pos = hashToPos(node.label || node.id, w, h);
-      return { ...node, weight, x: pos.x, y: pos.y };
-    });
-
-  drawHeat(points, dpr);
-}
-
-function hitTest(clientX, clientY) {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const x = (clientX - rect.left) * scaleX;
-  const y = (clientY - rect.top) * scaleY;
-  let best = null;
-  let bestDist = 28 * dpr;
-  for (const p of points) {
-    const dx = p.x - x;
-    const dy = p.y - y;
-    const d = Math.hypot(dx, dy);
-    if (d < bestDist) {
-      best = p;
-      bestDist = d;
-    }
-  }
-  return best;
-}
-
-canvas.addEventListener('pointermove', (e) => {
-  const hit = hitTest(e.clientX, e.clientY);
-  if (hit) {
-    tooltip.hidden = false;
-    tooltip.textContent = hit.label;
-    const rect = wrap.getBoundingClientRect();
-    tooltip.style.left = (e.clientX - rect.left) + 'px';
-    tooltip.style.top = (e.clientY - rect.top) + 'px';
-  } else {
-    tooltip.hidden = true;
-  }
+  const labelDiv = document.createElement('div');
+  labelDiv.className = 'hotspot-label';
+  const tvlText = weight > 0 ? `~$${(weight / 1000).toFixed(1)}B` : '';
+  labelDiv.innerHTML = `<strong>${node.label.split('(')[0].trim()}</strong>${tvlText ? `<span>${tvlText}</span>` : ''}`;
+  const label = new CSS2DObject(labelDiv);
+  label.position.copy(pos);
+  label.position.multiplyScalar(1.08);
+  pointsGroup.add(label);
 });
-canvas.addEventListener('pointerleave', () => { tooltip.hidden = true; });
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  const t = Date.now() * 0.001;
+  pointMeshes.forEach((m, i) => {
+    m.scale.setScalar(1 + Math.sin(t * 2 + i) * 0.05);
+  });
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  labelRenderer.setSize(w, h);
+});
 
 // ---------- UI ----------
-function renderStats(data, nodes, edges) {
+function renderStats() {
   const totalWeight = edges.reduce((s, e) => s + (e.weight || 0), 0);
-  $('#status').textContent = 'Live';
   $('#stats').innerHTML = [
     ['Graph nodes', data.viewModel?.nodeCount || nodes.length, 'protocols + assets'],
     ['Flow edges', data.viewModel?.edgeCount || edges.length, `${formatNumber.format(totalWeight)} weighted`],
-    ['Heat spots', points.length, 'entity TVL'],
+    ['Heat spots', pointMeshes.length, 'entity TVL'],
     ['Snapshot', (data.snapshotId || '').split(':').pop() || 'live', 'DefiLlama'],
   ].map(([label, value, note]) => `<article class="stat"><strong>${value}</strong><span>${label}</span><small>${note}</small></article>`).join('');
 }
 
-function renderAttributions(data, nodeById) {
-  const rows = (data.attributions || []).map(row => ({
+function renderAttributions() {
+  const rows = attributions.map(row => ({
     ...row,
     net: Number(row.netRaw || 0),
     label: nodeById.get(row.entityId)?.label || row.entityId,
@@ -198,49 +265,19 @@ function renderAttributions(data, nodeById) {
   }).join('') || '<p>No attribution rows.</p>';
 }
 
-function renderRank(points) {
+function renderRank() {
+  const points = nodes.filter(n => n.kind === 'entity').map(node => {
+    const weight = edges
+      .filter(e => e.fromNodeId === node.id || e.toNodeId === node.id)
+      .reduce((s, e) => s + (e.weight || 0), 0);
+    return { ...node, weight };
+  });
   const sorted = [...points].sort((a, b) => b.weight - a.weight).slice(0, 10);
   $('#rank').innerHTML = sorted.map((p, i) =>
     `<div class="rank-row"><span>${i + 1}. ${p.label.split('(')[0].trim()}</span><strong>~$${(p.weight / 1000).toFixed(1)}B</strong></div>`
   ).join('') || '<p>No points.</p>';
 }
 
-// About
-const aboutModal = document.getElementById('about-modal');
-document.getElementById('about-btn')?.addEventListener('click', () => {
-  aboutModal.hidden = false;
-  document.body.style.overflow = 'hidden';
-});
-aboutModal?.querySelectorAll('[data-close]').forEach(el => {
-  el.addEventListener('click', () => {
-    aboutModal.hidden = true;
-    document.body.style.overflow = '';
-  });
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && aboutModal && !aboutModal.hidden) {
-    aboutModal.hidden = true;
-    document.body.style.overflow = '';
-  }
-});
-
-// Boot
-(async () => {
-  try {
-    const data = await loadGraphData();
-    const nodes = data.api?.data?.nodes || [];
-    const edges = data.api?.data?.edges || [];
-    const nodeById = new Map(nodes.map(n => [n.id, n]));
-
-    renderMap(nodes, edges);
-    renderStats(data, nodes, edges);
-    renderAttributions(data, nodeById);
-    renderRank(points);
-
-    window.addEventListener('resize', () => renderMap(nodes, edges));
-  } catch (err) {
-    console.error(err);
-    $('#status').textContent = 'Error';
-    $('#stats').innerHTML = `<article class="stat"><strong>—</strong><span>Failed to load data</span><small>${err.message}</small></article>`;
-  }
-})();
+renderStats();
+renderAttributions();
+renderRank();
