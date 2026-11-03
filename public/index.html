@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fff9f0" />
+    <title>Liquidity Seas</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="mesh-stage" aria-hidden="true">
+      <div class="mesh-band"></div>
+      <div class="mesh-fade"></div>
+    </div>
+
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Monad Liquidity Seas</p>
+        <h1>Ocean heat of capital movement.</h1>
+        <p class="lede">Same live DefiLlama Monad TVL data as Liquidity Atlas. Protocols appear as thermal currents on a generated sea map — brighter heat, deeper liquidity.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="#map">Open heat map</a>
+          <button class="button ghost" id="about-btn" type="button">About</button>
+        </div>
+      </section>
+
+      <section class="map-card card" id="map">
+        <div class="map-header">
+          <div>
+            <p class="eyebrow">Live heat</p>
+            <h2>Monad liquidity seas</h2>
+          </div>
+          <span class="badge" id="status">Loading…</span>
+        </div>
+        <div id="map-wrap">
+          <canvas id="sea"></canvas>
+          <div id="tooltip" class="tooltip" hidden></div>
+        </div>
+      </section>
+
+      <section class="stats-grid" id="stats"></section>
+
+      <section class="analytics-row">
+        <article class="card">
+          <p class="eyebrow">Attribution</p>
+          <h2>Net movement by entity</h2>
+          <div id="attributions" class="bars"></div>
+        </article>
+        <article class="card">
+          <p class="eyebrow">Protocols</p>
+          <h2>Heat ranked</h2>
+          <div id="rank" class="rank"></div>
+        </article>
+      </section>
+    </main>
+
+    <div id="about-modal" class="modal" hidden>
+      <div class="modal-backdrop" data-close></div>
+      <div class="modal-card card" role="dialog">
+        <header>
+          <p class="eyebrow">Architecture</p>
+          <h2>Liquidity Seas</h2>
+          <button class="modal-close" type="button" data-close aria-label="Close">×</button>
+        </header>
+        <div class="modal-body">
+          <p>Same canonical graph and live DefiLlama adapter as Liquidity Atlas. The frontend is different: a generated ocean surface with procedural currents, and protocol TVL rendered as a thermal heatmap overlay.</p>
+          <ul class="arch-list">
+            <li><strong>Nodes</strong> — assets + protocol entities</li>
+            <li><strong>Edges</strong> — approximate flow weight from TVL</li>
+            <li><strong>Heat</strong> — brighter = higher TVL concentration</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
