@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#fff9f0" />
-    <title>Liquidity Seas</title>
+    <title>ARE WE FUCKED????</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -15,27 +15,11 @@
 
     <main class="shell">
       <section class="hero">
-        <p class="eyebrow">Monad Liquidity Seas</p>
-        <h1>Ocean heat of capital movement.</h1>
-        <p class="lede">Same live DefiLlama Monad TVL data as Liquidity Atlas. Protocols appear as thermal currents on a generated sea map — brighter heat, deeper liquidity.</p>
-        <div class="hero-actions">
-          <a class="button primary" href="#map">Open heat map</a>
-          <button class="button ghost" id="about-btn" type="button">About</button>
-        </div>
+        <h1 class="big-headline">ARE WE FUCKED????</h1>
       </section>
 
       <section class="map-card card" id="map">
-        <div class="map-header">
-          <div>
-            <p class="eyebrow">Live heat</p>
-            <h2>Monad liquidity seas</h2>
-          </div>
-          <span class="badge" id="status">Loading…</span>
-        </div>
-        <div id="map-wrap">
-          <canvas id="sea"></canvas>
-          <div id="tooltip" class="tooltip" hidden></div>
-        </div>
+        <div id="globe-container"></div>
       </section>
 
       <section class="stats-grid" id="stats"></section>
@@ -54,25 +38,14 @@
       </section>
     </main>
 
-    <div id="about-modal" class="modal" hidden>
-      <div class="modal-backdrop" data-close></div>
-      <div class="modal-card card" role="dialog">
-        <header>
-          <p class="eyebrow">Architecture</p>
-          <h2>Liquidity Seas</h2>
-          <button class="modal-close" type="button" data-close aria-label="Close">×</button>
-        </header>
-        <div class="modal-body">
-          <p>Same canonical graph and live DefiLlama adapter as Liquidity Atlas. The frontend is different: a generated ocean surface with procedural currents, and protocol TVL rendered as a thermal heatmap overlay.</p>
-          <ul class="arch-list">
-            <li><strong>Nodes</strong> — assets + protocol entities</li>
-            <li><strong>Edges</strong> — approximate flow weight from TVL</li>
-            <li><strong>Heat</strong> — brighter = higher TVL concentration</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://esm.sh/three@0.169.0",
+        "three/addons/": "https://esm.sh/three@0.169.0/examples/jsm/"
+      }
+    }
+    </script>
     <script type="module" src="./app.js"></script>
   </body>
 </html>
