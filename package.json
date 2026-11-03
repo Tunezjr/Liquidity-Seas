@@ -1,0 +1,9 @@
+{
+  "name": "liquidity-seas",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "npx serve public",
+    "build": "echo 'static'"
+  }
+}
